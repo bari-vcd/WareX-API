@@ -1,11 +1,11 @@
 from requests import Response, post;
-from typing import Callable, Any;
+from typing import Callable, Any, Literal;
 from datetime import datetime;
 from functools import wraps
-import os;
+import os, json;
 
-BASE_API_URL: str = f"https://fluffycookies.space/api"
-API_KEY: str = 'your api key))'; #
+BASE_API_URL: str = "https://fluffycookies.space/api"
+API_KEY: str = 'get the api key and insert it here';
 
 def _timer(func: Callable) -> Callable[..., Any]:
     @wraps(func)
@@ -19,13 +19,24 @@ def _timer(func: Callable) -> Callable[..., Any]:
 
     return wrapper;
 
-def rbxlx_file_to_string(file_path: str) -> str:
-    if file_path and os.path.exists(file_path):
-        with open(file_path, 'r', encoding='utf-8') as file:
-            string: str = file.read()
-            return string or 'Couldnt read the file';
+def _read_file(path: str, is_bytes: bool = True) -> bytes | str | None:
+    mode: Literal['rb', 'r'] = 'rb' if is_bytes else 'r'
+    encoding: Literal['utf-8'] | None = None if is_bytes else 'utf-8'
+    
+    try:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
 
-    return 'The file was not found or was not passed as an argument.'
+        with open(path, mode, encoding=encoding) as f:
+            return f.read()
+
+    except FileNotFoundError:
+        print(f"[!] File not found: {path}")
+
+    except Exception as e:
+        print(f"[!] Unknown error reading {path}: {e}")
+
+    return None
 
 def save_string_to_rbxlx_file(_string: str, file_name: str) -> bool | None:
     try:
@@ -45,12 +56,12 @@ def _set_cookie(API_KEY: str, Cookie: str) -> bool:
             url = f'{BASE_API_URL}/v1/vcd-uploader/set-cookie',
 
             headers = {
-                'Authorization': API_KEY,  # required
+                'Authorization': API_KEY,              # required
                 'Content-Type': 'application/json'
             },
 
             json = {
-                'cookie': Cookie # required
+                'cookie': Cookie                      # required
             }
         )
 
@@ -64,27 +75,27 @@ def _set_cookie(API_KEY: str, Cookie: str) -> bool:
         return False
 
 def _unblacklist(API_KEY: str, file_name: str) -> Response | None:
-    file_string: str | None = rbxlx_file_to_string(os.path.join(os.getcwd(), "API", "src", "game-files", file_name))
+    file_string: str | bytes | None = _read_file(path=os.path.join(os.getcwd(), "WareX", "API", "src", "game-files", file_name), is_bytes=False)
     
     response: Response = post(
         url = f'{BASE_API_URL}/v1/unblacklist',
 
         headers = {
-            'Authorization': API_KEY, # reqired
+            'Authorization': API_KEY,    # reqired
             'Content-Type': 'application/json'
         },
 
         json = {
-            'file-type': '.rbxlx',   # required
-            'file-name': file_name,  # optional
-            'file': file_string      # required
+            'file-type': '.rbxlx',      # required
+            'file-name': file_name,     # optional
+            'file': file_string         # required
         }
     )
 
     return response;
 
 @_timer
-def upload_new_game(API_KEY: str, Server_Size: int, File_Name: str = 'test.rbxlx', Username: str = 'vcd_', game_name: str = 'meow') ->  Response | None:
+def upload_new_game(API_KEY: str, Server_Size: int, File_Name: str, Username: str, game_name: str = 'random') ->  Response | None:
     try:
         response: Response = post(
             url = f'{BASE_API_URL}/v1/vcd-uploader/create',
@@ -119,13 +130,42 @@ def unblacklist_file(file_name: str) -> bool:
         
         if message == 'Success':
             file: str = json_data.get('file-string')
-            save_string_to_rbxlx_file(file, 'example-file-name')
+            save_string_to_rbxlx_file(file, 'example-file-name') # file name
 
             return True;
 
     return False
 
-response: Response | None = upload_new_game(
+def cookie_is_valid() -> Any | None:
+    cookies: bytes | str | None = _read_file(path = os.path.join(os.getcwd(), "cookies.json"), is_bytes=False)
+
+    json_data: dict = json.loads(json.dumps(cookies))
+    
+    response = post(
+        url = f'{BASE_API_URL}/v1/cookie-is-valid',
+        headers = {
+            'Authorization': API_KEY,
+            'Content-Type': 'application/json'
+        },
+        json = {
+            'cookies': json_data
+        }
+    )
+
+    if response and response.json():
+        response_json_data = response.json();
+        status = response_json_data.get('status') # bool
+        valid_cookies = response_json_data.get('valid-cookies')
+
+        return valid_cookies;
+
+    return None;
+
+print(cookie_is_valid())
+
+# print(unblacklist_file('nefors.rbxlx'))
+
+"""response: Response | None = upload_new_game(
     API_KEY = API_KEY, 
     Server_Size = 60,   
     File_Name = "test.rbxlx", 
@@ -133,5 +173,8 @@ response: Response | None = upload_new_game(
     game_name = 'v.c.d._'
 )
 
+print(response.text)
+print(response.status_code)
+
 if response and response.status_code == 200 and response.json():
-    print(f'json body: {response.json()}')
+    print(f'json body: {response.json()}')"""
